@@ -3,6 +3,7 @@ library(lubridate)
 library(odbc)
 library(httr)
 library(jsonlite)
+library(tidytext)
 
 # Initialize DB connection
 con <- DBI::dbConnect(
@@ -19,16 +20,26 @@ con <- DBI::dbConnect(
 
 # These are custom tables that hold the history of NPS scores for each patron
 
-# Returned columns: id, customer_no, prod_season_no, nps_prod_score, 
+# Returned columns: id, customer_no, prod_season_no, prod_title, nps_prod_score, 
 # created_by, create_dt, create_loc, last_updated_by, last_update_dt
 nps_prod_con <- dbSendQuery(con,
-                            "SELECT * from lt_nps_prod with (NOLOCK)")
+                            "SELECT id, customer_no, prod_season_no,  b.description as prod_title, nps_prod_score, 
+                            created_by, create_dt, create_loc, last_updated_by, last_update_dt
+                            FROM lt_nps_prod a With (NOLOCK)
+                            JOIN T_INVENTORY b With (NOLOCK) on a.prod_season_no = b.inv_no;")
 nps_prod <- dbFetch(nps_prod_con)
+
+# get just the unique title and prod_season_no combo
+
+prodSeasonTitles <- nps_prod %>%
+  group_by(prod_season_no) %>%
+  summarize(title = unique(prod_title))
 
 # Returned columns: id, customer_no, prod_season_no, nps_company_score, 
 # created_by, create_dt, create_loc, last_updated_by, last_update_dt
 nps_company_con <- dbSendQuery(con,
-                               "SELECT * from lt_nps_company with (NOLOCK)")
+                               "SELECT * 
+                               FROM lt_nps_company a with (NOLOCK)")
 nps_company <- dbFetch(nps_company_con)
 
 # Get Typeform Data through the API
@@ -62,12 +73,22 @@ companyScore <- calculateNPS(nps_company,"nps_company_score")
 
 # Get the cumulative NPS as of each rating
 cumulativeScores <- c()
+cumulativePromoters <- c()
+cumulativePassives <- c()
+cumulativeDetractors <- c()
 for(score in 1:nrow(nps_company)){
   ratings <- nps_company[1:score,]
   newScore <- calculateNPS(ratings, "nps_company_score")
+  
   cumulativeScores <- append(cumulativeScores, newScore$npsScore)
+  cumulativePromoters <- append(cumulativePromoters, newScore$totalPromoters)
+  cumulativePassives <- append(cumulativePassives, newScore$totalPassives)
+  cumulativeDetractors <- append(cumulativeDetractors, newScore$totalDetractors)
 }
 nps_company$cumulativeScore <- cumulativeScores
+nps_company$totalPromoters <- cumulativePromoters
+nps_company$totalPassives <- cumulativePassives
+nps_company$totalDetractors <- cumulativeDetractors
 
 # Get the NPS for each show
 prodResults <- list()
@@ -77,7 +98,9 @@ for(prodSeason in factor(nps_prod$prod_season_no)){
   
   prodResults[[prodSeason]] <- calculateNPS(prodSeasonScores, "nps_prod_score")
 }
-productionScores <- bind_rows(prodResults, .id="prodSeason")
+productionScores <- bind_rows(prodResults, .id="prodSeason") %>%
+  mutate(prodSeason = as.numeric(prodSeason)) %>%
+  left_join(prodSeasonTitles, by=c("prodSeason" = "prod_season_no"))
 
 # Combined data for comparison analysis
 

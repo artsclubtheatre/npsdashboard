@@ -24,21 +24,17 @@ shinyUI(
           " (Detractors %) = "
           ),
           gaugeOutput("companyScoreGauge"),
-        h2("How has the overall NPS score changed over time?"),
+        h2("How has the overall company NPS score changed over time?"),
         plotlyOutput("companyScoreOverTime"),
+        plotOutput("companyRatingsOverTime"),
         h2("How many times has each score has been given?"),
         plotOutput("companyScoreDistribution"),
-        h2("Does a particular production affect the company score?"),
-        p("Or, in other words, are company scores correlated to production scores?"),
-        p("The size of each dot counts how many times
-          that combination of scores was given. The line shows the correlation between the scores. The stronger the slope,
-          the more we can say the two scores are correlated."),
-        p("In this case, ",
-          strong(percent(cor(allScores$nps_company_score, allScores$nps_prod_score))),
-          " of the company score can be explained by the production score"
-          ),
+        h2("Are the company and production scores related?"),
+        p("This shows the combination of ratings. The size of each dot counts how many times 
+          that combination of scores was given."),
         plotOutput("companyProductionCorrelation"),
         hr(),
+        h1("Production NPS Scores"),
         uiOutput("prodPlots")
        ),
   title = "NPS Dashboard",

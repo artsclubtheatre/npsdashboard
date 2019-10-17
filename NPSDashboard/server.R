@@ -2,6 +2,7 @@ library(shiny)
 library(tidyverse)
 library(flexdashboard)
 library(plotly)
+library(reshape2)
 
 load("npsData.RData")
 
@@ -39,6 +40,29 @@ shinyServer(function(input, output, session) {
     ggplotly(plot, tooltip=c("text"))
   })
   
+  output$companyRatingsOverTime <- renderPlot({
+    smallCompany <- nps_company %>%
+      select(create_dt, totalPromoters, totalPassives, totalDetractors)
+    meltedCompany <- melt(list(smallCompany),
+                          id.vars = c("create_dt"))
+    
+    ggplot(meltedCompany, aes(create_dt, value, group=variable, col=variable))+
+      geom_line(size=1.5)+
+      ylab("Total Patrons")+
+      xlab("Date")+
+      theme_minimal()+
+      theme(legend.position = "bottom")+
+      scale_color_manual(name="Patrons",
+                         labels=c("Promoters",
+                                  "Passives",
+                                  "Detractors"),
+                         values = c("totalPromoters" = "seagreen4",
+                                    "totalPassives" = "steelblue",
+                                    "totalDetractors" = "firebrick3")
+                         )+
+      theme(axis.text = element_text(size=14))
+  })
+  
   output$companyScoreDistribution <- renderPlot({
     ggplot(nps_company, aes(nps_company_score))+
       geom_histogram(binwidth = .5, color="steelblue", fill="white")+
@@ -66,7 +90,18 @@ shinyServer(function(input, output, session) {
     plotOuputList <- lapply(productionScores$prodSeason, function(prod){
       print(paste0("Calling ", prod))
       plotname <- prod
-      gaugeOutput(plotname)
+      title <- productionScores$title[productionScores$prodSeason == plotname]
+      list(
+        div(class="col-xs-3",
+            h3(title),
+            p(
+              strong(productionScores$totalPromoters[productionScores$prodSeason == plotname]), " Promoters, ",
+              strong(productionScores$totalPassives[productionScores$prodSeason == plotname]), " Passives, and ",
+              strong(productionScores$totalDetractors[productionScores$prodSeason == plotname]), " Detractors "
+            ),
+            gaugeOutput(plotname)
+          )
+      )
     })
     
     do.call(tagList, plotOuputList)
@@ -78,7 +113,7 @@ shinyServer(function(input, output, session) {
       
       output[[plotname]] <- renderGauge({
         score <- productionScores %>% 
-          filter(prodSeason == prod) %>% 
+          filter(prodSeason == plotname) %>% 
           mutate(npsScore = round(npsScore))
         
         gauge(value = score$npsScore, min = -100, max = 100, symbol = '', gaugeSectors(
