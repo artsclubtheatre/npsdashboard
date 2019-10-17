@@ -3,6 +3,7 @@ library(tidyverse)
 library(flexdashboard)
 library(plotly)
 library(reshape2)
+library(wordcloud2)
 
 load("npsData.RData")
 
@@ -73,6 +74,42 @@ shinyServer(function(input, output, session) {
       theme(axis.text = element_text(size=14))
   })
   
+  # output$companyWordCloud <- renderWordcloud2({
+  #   text <- companyText %>% top_n(50)
+  #   wordcloud2(text)
+  # })
+  
+  output$companyProductionGreater <- renderText({
+    avgCompany <- mean(allScores$nps_company_score)
+    avgProd <- mean(allScores$nps_prod_score)
+    
+    if(avgCompany > avgProd){
+      return(paste(
+        "On average, patrons rate the company (", 
+        round(avgCompany, 1), 
+        " avg ) higher than the production (",
+        round(avgProd, 1),
+        " avg )"
+        ))
+    } else if (avgCompany < avgProd){
+      return(paste(
+        "On average, patrons rate the company (", 
+        round(avgCompany, 1), 
+        " avg ) lower than the production (",
+        round(avgProd, 1),
+        " avg )"
+      ))
+    } else {
+      return(paste(
+        "On average, patrons rate the company (", 
+        round(avgCompany, 1), 
+        " avg ) and the production (",
+        round(avgProd, 1),
+        " avg ) about the same"
+      ))
+    }
+  })
+
   output$companyProductionCorrelation <- renderPlot({
     ggplot(allScores, aes(nps_company_score, nps_prod_score))+
       geom_count(col="steelblue")+

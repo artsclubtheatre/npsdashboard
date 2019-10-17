@@ -108,14 +108,26 @@ allScores <- nps_company %>%
   left_join(nps_prod, by=c("customer_no","prod_season_no")) %>%
   select(customer_no, prod_season_no, nps_company_score, nps_prod_score)
 
+# Get the text for word clouds
+
+companyText <- surveyAnswers %>%
+  filter(field.ref == "actc-company-text") %>%
+  select(text) %>%
+  gather(key, text) %>%
+  unnest_tokens(word, text) %>%
+  count(word, sort=TRUE) %>%
+  ungroup() %>%
+  anti_join(stop_words)
+
 # Save data ----
 
 save(
   nps_company,
   nps_prod,
-  prodSeasonScores,
+  productionScores,
   companyScore,
   allScores,
+  companyText,
   calculateNPS,
   file='NPSDashboard/npsData.RData'
 )
