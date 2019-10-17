@@ -1,0 +1,8 @@
+.html-widget.gauge {
+  height: 100%;
+}
+
+.html-widget.gauge svg {
+  height: 100%;
+  margin: 10px 0px;
+}

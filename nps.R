@@ -1,5 +1,8 @@
 library(tidyverse)
+library(lubridate)
 library(odbc)
+library(httr)
+library(jsonlite)
 
 # Initialize DB connection
 con <- DBI::dbConnect(
@@ -28,10 +31,45 @@ nps_company_con <- dbSendQuery(con,
                                "SELECT * from lt_nps_company with (NOLOCK)")
 nps_company <- dbFetch(nps_company_con)
 
+# Get Typeform Data through the API
+
+typeformData <- GET(
+  'https://api.typeform.com/forms/NTuvnn/responses?page_size=1000',
+  add_headers(
+    Authorization = paste0(
+      "Bearer ", 
+      Sys.getenv("typeformToken")
+      )
+    )
+  ) %>%
+  content("text") %>%
+  fromJSON(flatten = TRUE)
+
+surveyResponses <- tibble(
+  answers = typeformData$items$answers,
+  patronId = typeformData$items$hidden.patronid,
+  prodSeasonNo = typeformData$items$hidden.prod_season_no,
+  prodTitle = typeformData$items$hidden.show_title,
+  segment = typeformData$items$hidden.segment
+)
+
+surveyAnswers <- bind_rows(surveyResponses$answers) %>%
+  filter(!is.na(text))
+
 # Data Prep ----
 
 companyScore <- calculateNPS(nps_company,"nps_company_score")
 
+# Get the cumulative NPS as of each rating
+cumulativeScores <- c()
+for(score in 1:nrow(nps_company)){
+  ratings <- nps_company[1:score,]
+  newScore <- calculateNPS(ratings, "nps_company_score")
+  cumulativeScores <- append(cumulativeScores, newScore$npsScore)
+}
+nps_company$cumulativeScore <- cumulativeScores
+
+# Get the NPS for each show
 prodResults <- list()
 for(prodSeason in factor(nps_prod$prod_season_no)){
   prodSeasonScores <- nps_prod %>%
@@ -41,12 +79,22 @@ for(prodSeason in factor(nps_prod$prod_season_no)){
 }
 productionScores <- bind_rows(prodResults, .id="prodSeason")
 
+# Combined data for comparison analysis
+
+allScores <- nps_company %>%
+  left_join(nps_prod, by=c("customer_no","prod_season_no")) %>%
+  select(customer_no, prod_season_no, nps_company_score, nps_prod_score)
+
 # Save data ----
 
 save(
+  nps_company,
+  nps_prod,
   prodSeasonScores,
   companyScore,
-  file='npsData.RData'
+  allScores,
+  calculateNPS,
+  file='NPSDashboard/npsData.RData'
 )
 
 # Functions ----
