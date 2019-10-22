@@ -3,7 +3,7 @@ library(tidyverse)
 library(flexdashboard)
 library(plotly)
 library(reshape2)
-library(wordcloud2)
+library(ggwordcloud)
 
 load("npsData.RData")
 
@@ -74,10 +74,13 @@ shinyServer(function(input, output, session) {
       theme(axis.text = element_text(size=14))
   })
   
-  # output$companyWordCloud <- renderWordcloud2({
-  #   text <- companyText %>% top_n(50)
-  #   wordcloud2(text)
-  # })
+  output$companyWordCloud <- renderPlot({
+    text <- companyText %>% top_n(75)
+    ggplot(text, aes(label=word, size=n, col=word))+
+      geom_text_wordcloud()+
+      scale_size_area(max_size = 25)+
+      theme_minimal()
+  })
   
   output$companyProductionGreater <- renderText({
     avgCompany <- mean(allScores$nps_company_score)
@@ -125,11 +128,10 @@ shinyServer(function(input, output, session) {
   
   output$prodPlots <- renderUI({
     plotOuputList <- lapply(productionScores$prodSeason, function(prod){
-      print(paste0("Calling ", prod))
       plotname <- prod
       title <- productionScores$title[productionScores$prodSeason == plotname]
       list(
-        div(class="col-xs-3",
+        div(class="col-xs-12 col-md-3",
             h3(title),
             p(
               strong(productionScores$totalPromoters[productionScores$prodSeason == plotname]), " Promoters, ",

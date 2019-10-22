@@ -62,10 +62,14 @@ surveyResponses <- tibble(
   prodSeasonNo = typeformData$items$hidden.prod_season_no,
   prodTitle = typeformData$items$hidden.show_title,
   segment = typeformData$items$hidden.segment
-)
+) %>%
+  mutate(id = as.character(row_number()))
 
-surveyAnswers <- bind_rows(surveyResponses$answers) %>%
-  filter(!is.na(text))
+surveyAnswers <- bind_rows(surveyResponses$answers, .id="id") %>%
+  filter(!is.na(text)) %>%
+  left_join(surveyResponses, by="id") %>%
+  select(-answers)
+  
 
 # Data Prep ----
 

@@ -31,6 +31,8 @@ shinyUI(
         plotOutput("companyRatingsOverTime"),
         h2("How many times has each score has been given?"),
         plotOutput("companyScoreDistribution"),
+        h2("What are the most common words used in company ratings?"),
+        plotOutput("companyWordCloud"),
         h2("Are the company and production scores related?"),
         p("This shows the combination of ratings. The size of each dot counts how many times 
           that combination of scores was given."),
