@@ -65,6 +65,11 @@ surveyResponses <- tibble(
 ) %>%
   mutate(id = as.character(row_number()))
 
+segments <- tibble(
+  patronId = as.numeric(typeformData$items$hidden.patronid),
+  segment = typeformData$items$hidden.segment
+)
+
 surveyAnswers <- bind_rows(surveyResponses$answers, .id="id") %>%
   filter(!is.na(text)) %>%
   left_join(surveyResponses, by="id") %>%
@@ -74,6 +79,24 @@ surveyAnswers <- bind_rows(surveyResponses$answers, .id="id") %>%
 # Data Prep ----
 
 companyScore <- calculateNPS(nps_company,"nps_company_score")
+
+# Get the company scores by segment
+
+companyScoreBySegment <- nps_company %>%
+  left_join(segments, by=c("customer_no" = "patronId")) %>%
+  mutate(nps = categorizeNPSRating(nps_company_score)) %>%
+  group_by(segment, nps) %>%
+  summarize(n = n()) %>%
+  group_by(segment) %>%
+  mutate(total = sum(n),
+         per = round(n/total * 100, 1)) %>%
+  filter(nps != "Passive") %>%
+  spread(nps, per) %>%
+  summarize(total = sum(total),
+            detractor = sum(Detractor, na.rm=TRUE),
+            promoter = sum(Promoter, na.rm=TRUE),
+            score = promoter - detractor) %>%
+  select(segment, score)
 
 # Get the cumulative NPS as of each rating
 cumulativeScores <- c()
@@ -123,6 +146,16 @@ companyText <- surveyAnswers %>%
   ungroup() %>%
   anti_join(stop_words)
 
+productionText <- surveyAnswers %>%
+  filter(field.ref == "actc-show-text") %>%
+  select(text, prodSeasonNo) %>%
+  gather(key, text, -prodSeasonNo) %>%
+  unnest_tokens(word, text) %>%
+  group_by(prodSeasonNo) %>%
+  count(word, sort=TRUE) %>%
+  ungroup() %>%
+  anti_join(stop_words)
+
 # Save data ----
 
 save(
@@ -130,8 +163,10 @@ save(
   nps_prod,
   productionScores,
   companyScore,
+  companyScoreBySegment,
   allScores,
   companyText,
+  productionText,
   calculateNPS,
   file='NPSDashboard/npsData.RData'
 )
@@ -194,4 +229,21 @@ calculateNPS <- function (patronScores, scoreColumn) {
   
   return(nps)
   
+}
+
+categorizeNPSRating <- function (score) {
+  require("dplyr")
+  
+  promoterScores <- c(9, 10)
+  passiveScores <- c(7,8)
+  detractorScores <- c(0:6)
+  
+  category <- ifelse(
+    score %in% promoterScores, "Promoter", 
+    ifelse(
+      score %in% passiveScores, "Passive", "Detractor"
+      )
+    )
+  
+  return(category)
 }

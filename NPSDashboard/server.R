@@ -82,6 +82,15 @@ shinyServer(function(input, output, session) {
       theme_minimal()
   })
   
+  output$companyScoreBySegment <- renderPlot({
+    ggplot(companyScoreBySegment, aes(segment, score, fill=segment))+
+      geom_bar(stat='identity')+
+      geom_text(aes(label=score), position = position_nudge(y=-5), size=10, color="white")+
+      ylab("Score")+
+      xlab("Patron Segment")+
+      theme_minimal()
+  })
+  
   output$companyProductionGreater <- renderText({
     avgCompany <- mean(allScores$nps_company_score)
     avgProd <- mean(allScores$nps_prod_score)
@@ -129,16 +138,19 @@ shinyServer(function(input, output, session) {
   output$prodPlots <- renderUI({
     plotOuputList <- lapply(productionScores$prodSeason, function(prod){
       plotname <- prod
+      cloudname <- paste0(prod, "cloud")
       title <- productionScores$title[productionScores$prodSeason == plotname]
       list(
-        div(class="col-xs-12 col-md-3",
+        div(class="col-xs-12 col-md-3 panel panel-default",
             h3(title),
             p(
               strong(productionScores$totalPromoters[productionScores$prodSeason == plotname]), " Promoters, ",
               strong(productionScores$totalPassives[productionScores$prodSeason == plotname]), " Passives, and ",
               strong(productionScores$totalDetractors[productionScores$prodSeason == plotname]), " Detractors "
             ),
-            gaugeOutput(plotname)
+            gaugeOutput(plotname),
+            p(strong(paste("What are the most common words used in", title,"ratings?"))),
+            plotOutput(cloudname, height="200")
           )
       )
     })
@@ -149,6 +161,7 @@ shinyServer(function(input, output, session) {
   for(prod in factor(productionScores$prodSeason)) {
     local({
       plotname <- prod
+      cloudname <- paste0(prod, "cloud")
       
       output[[plotname]] <- renderGauge({
         score <- productionScores %>% 
@@ -160,6 +173,17 @@ shinyServer(function(input, output, session) {
           warning = c(0, 50),
           danger = c(-100, 0)
         ))
+      })
+      
+      output[[cloudname]] <- renderPlot({
+        prodText <- productionText %>%
+          filter(prodSeasonNo == plotname) %>%
+          top_n(20)
+        
+        ggplot(prodText, aes(label=word, size=n, col=word))+
+          geom_text_wordcloud()+
+          scale_size_area(max_size = 15)+
+          theme_minimal()
       })
     })
   }

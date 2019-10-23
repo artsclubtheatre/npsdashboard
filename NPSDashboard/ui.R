@@ -29,6 +29,8 @@ shinyUI(
         plotlyOutput("companyScoreOverTime"),
         h2("How has the number of patrons in each NPS category changed over time?"),
         plotOutput("companyRatingsOverTime"),
+        h2("How does the score break down by patron segment?"),
+        plotOutput("companyScoreBySegment"),
         h2("How many times has each score has been given?"),
         plotOutput("companyScoreDistribution"),
         h2("What are the most common words used in company ratings?"),
