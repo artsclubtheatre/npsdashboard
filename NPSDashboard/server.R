@@ -43,7 +43,13 @@ shinyServer(function(input, output, session) {
   
   output$companyRatingsOverTime <- renderPlot({
     smallCompany <- nps_company %>%
-      select(create_dt, totalPromoters, totalPassives, totalDetractors)
+      select(create_dt, totalPromoters, totalPassives, totalDetractors) %>%
+      group_by(create_dt) %>%
+      mutate(total = sum(totalPromoters, totalPassives, totalDetractors),
+             promoterPercent = totalPromoters / total,
+             passivePercent = totalPassives / total,
+             detractorPercent = totalDetractors / total) %>%
+      select(create_dt, promoterPercent, passivePercent, detractorPercent)
     meltedCompany <- melt(list(smallCompany),
                           id.vars = c("create_dt"))
     
@@ -51,28 +57,20 @@ shinyServer(function(input, output, session) {
       geom_line(size=1.5)+
       ylab("Total Patrons")+
       xlab("Date")+
+      scale_y_continuous(labels = scales::percent)+
       theme_minimal()+
       theme(legend.position = "bottom")+
       scale_color_manual(name="Patrons",
                          labels=c("Promoters",
                                   "Passives",
                                   "Detractors"),
-                         values = c("totalPromoters" = "seagreen4",
-                                    "totalPassives" = "steelblue",
-                                    "totalDetractors" = "firebrick3")
+                         values = c("promoterPercent" = "seagreen4",
+                                    "passivePercent" = "steelblue",
+                                    "detractorPercent" = "firebrick3")
                          )+
       theme(axis.text = element_text(size=14))
   })
   
-  output$companyScoreDistribution <- renderPlot({
-    ggplot(nps_company, aes(nps_company_score))+
-      geom_histogram(binwidth = .5, color="steelblue", fill="white")+
-      scale_x_continuous(breaks = c(0:10))+
-      ylab("Number of Scores")+
-      xlab("Score")+
-      theme_minimal()+
-      theme(axis.text = element_text(size=14))
-  })
   
   output$companyWordCloud <- renderPlot({
     text <- companyText %>% top_n(75)
@@ -125,12 +123,13 @@ shinyServer(function(input, output, session) {
   output$companyProductionCorrelation <- renderPlot({
     ggplot(allScores, aes(nps_company_score, nps_prod_score))+
       geom_count(col="steelblue")+
+      geom_smooth(method="lm")+
+      geom_abline(intercept = 0, linetype="dashed")+
       scale_size_area(max_size = 20)+
       scale_x_continuous(breaks = c(0:10))+
       scale_y_continuous(breaks = c(0:10))+
       ylab("Production Score")+
       xlab("Company Score")+
-      geom_smooth(method="lm")+
       theme_minimal()+
       theme(axis.text = element_text(size=14))
   })

@@ -96,7 +96,8 @@ companyScoreBySegment <- nps_company %>%
             detractor = sum(Detractor, na.rm=TRUE),
             promoter = sum(Promoter, na.rm=TRUE),
             score = promoter - detractor) %>%
-  select(segment, score)
+  select(segment, score) %>%
+  filter(!segment %in% c("STX", NA))
 
 # Get the cumulative NPS as of each rating
 cumulativeScores <- c()
@@ -137,6 +138,19 @@ allScores <- nps_company %>%
 
 # Get the text for word clouds
 
+artsClubStopWords <- tribble(
+  ~ word,
+  "play",
+  "plays",
+  "theatre",
+  "arts",
+  "club",
+  "production",
+  "productions",
+  "performance",
+  "performances"
+)
+
 companyText <- surveyAnswers %>%
   filter(field.ref == "actc-company-text") %>%
   select(text) %>%
@@ -144,7 +158,8 @@ companyText <- surveyAnswers %>%
   unnest_tokens(word, text) %>%
   count(word, sort=TRUE) %>%
   ungroup() %>%
-  anti_join(stop_words)
+  anti_join(stop_words) %>%
+  anti_join(artsClubStopWords)
 
 productionText <- surveyAnswers %>%
   filter(field.ref == "actc-show-text") %>%
@@ -154,7 +169,8 @@ productionText <- surveyAnswers %>%
   group_by(prodSeasonNo) %>%
   count(word, sort=TRUE) %>%
   ungroup() %>%
-  anti_join(stop_words)
+  anti_join(stop_words) %>%
+  anti_join(artsClubStopWords)
 
 # Save data ----
 
