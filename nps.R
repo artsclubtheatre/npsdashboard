@@ -4,6 +4,7 @@ library(odbc)
 library(httr)
 library(jsonlite)
 library(tidytext)
+library(parsedate)
 
 # Initialize DB connection
 con <- DBI::dbConnect(
@@ -56,14 +57,74 @@ typeformData <- GET(
   content("text") %>%
   fromJSON(flatten = TRUE)
 
+# If the page count is greater than 1, then we need to fetch the rest of the responses.
+# Unfortunately, the Typeform API doesn't give us the option to just
+# fetch the next page of data, so we have to use the "before" token and fetch backwards.
+
+extraResponsePages <- list()
+
+if(typeformData$page_count > 1) {
+  
+  for(page in 2:typeformData$page_count){
+    
+    # If we've already gone through the loop and there's still more to fetch, 
+    # then we need to set the min date to the new data, otherwise, set it to the old data.
+    if(exists("typeformData2")){
+      if(typeformData2$page_count > 1){
+        minResponseDate <- min(parsedate::parse_iso_8601(typeformData2$items$submitted_at))
+      } else {
+        minResponseDate <- min(parsedate::parse_iso_8601(typeformData$items$submitted_at))
+      }
+    } else {
+      minResponseDate <- min(parsedate::parse_iso_8601(typeformData$items$submitted_at))
+    }
+    
+    beforeToken <- typeformData$items$token[parsedate::parse_iso_8601(typeformData$items$submitted_at) == minResponseDate]
+    
+    typeformData2 <- GET(
+      paste0('https://api.typeform.com/forms/NTuvnn/responses?page_size=1000&before=', beforeToken),
+      add_headers(
+        Authorization = paste0(
+          "Bearer ", 
+          Sys.getenv("typeformToken")
+        )
+      )
+    ) %>%
+      content("text") %>%
+      fromJSON(flatten = TRUE)
+    
+    moreTypeformResponses <- tibble(
+        answers = typeformData2$items$answers,
+        patronId = typeformData2$items$hidden.patronid,
+        prodSeasonNo = typeformData2$items$hidden.prod_season_no,
+        prodTitle = typeformData2$items$hidden.show_title,
+        segment = typeformData2$items$hidden.segment
+      ) %>%
+      mutate(id = as.character(row_number()))
+    
+    if("hidden.donor" %in% colnames(typeformData2$items)){
+      moreTypeformResponses %>% 
+        mutate(donor = typeformData2$items$hidden.donor)
+    }
+    
+    extraResponsePages[[as.character(page)]] <- moreTypeformResponses
+    
+  }
+  
+}
+
+allExtraResponses <- bind_rows(extraResponsePages)
+
 surveyResponses <- tibble(
-  answers = typeformData$items$answers,
-  patronId = typeformData$items$hidden.patronid,
-  prodSeasonNo = typeformData$items$hidden.prod_season_no,
-  prodTitle = typeformData$items$hidden.show_title,
-  segment = typeformData$items$hidden.segment
-) %>%
-  mutate(id = as.character(row_number()))
+    answers = typeformData$items$answers,
+    patronId = typeformData$items$hidden.patronid,
+    prodSeasonNo = typeformData$items$hidden.prod_season_no,
+    prodTitle = typeformData$items$hidden.show_title,
+    segment = typeformData$items$hidden.segment,
+    donor = typeformData$items$hidden.donor == 'Y'
+  ) %>%
+  mutate(id = as.character(row_number())) %>%
+  bind_rows(allExtraResponses)
 
 segments <- tibble(
   patronId = as.numeric(typeformData$items$hidden.patronid),
