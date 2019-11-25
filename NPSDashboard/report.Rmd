@@ -1,0 +1,33 @@
+---
+title: "NPS Dashboard"
+output: html_document
+---
+
+```{r, echo=FALSE}
+
+library(shiny)
+library(tidyverse)
+library(flexdashboard)
+library(plotly)
+library(reshape2)
+library(ggwordcloud)
+
+load('npsData.RData')
+
+```
+
+```{r, echo=FALSE}
+
+renderGauge({
+    
+    score <- round(companyScore$npsScore)
+    
+    gauge(value = score, min = -100, max = 100, symbol = '', gaugeSectors(
+      success = c(50, 100),
+      warning = c(0, 50),
+      danger = c(-100, 0)
+    ))
+    
+  })
+
+```

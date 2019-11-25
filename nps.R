@@ -61,6 +61,7 @@ typeformData <- GET(
 # Unfortunately, the Typeform API doesn't give us the option to just
 # fetch the next page of data, so we have to use the "before" token and fetch backwards.
 
+typeformData2 <- list()
 extraResponsePages <- list()
 
 if(typeformData$page_count > 1) {
@@ -69,17 +70,14 @@ if(typeformData$page_count > 1) {
     
     # If we've already gone through the loop and there's still more to fetch, 
     # then we need to set the min date to the new data, otherwise, set it to the old data.
-    if(exists("typeformData2")){
-      if(typeformData2$page_count > 1){
-        minResponseDate <- min(parsedate::parse_iso_8601(typeformData2$items$submitted_at))
-      } else {
-        minResponseDate <- min(parsedate::parse_iso_8601(typeformData$items$submitted_at))
-      }
+    if(exists("typeformData2") && length(typeformData2) > 0){
+        minResponseDate <- min(parsedate::parse_iso_8601(typeformData2$items$submitted_at[typeformData2$items$submitted_at != "0001-01-01T00:00:00Z"]))
+        beforeToken <- typeformData2$items$token[parsedate::parse_iso_8601(typeformData2$items$submitted_at) == minResponseDate]
     } else {
-      minResponseDate <- min(parsedate::parse_iso_8601(typeformData$items$submitted_at))
+      minResponseDate <- min(parsedate::parse_iso_8601(typeformData$items$submitted_at[typeformData$items$submitted_at != "0001-01-01T00:00:00Z"]))
+      beforeToken <- typeformData$items$token[parsedate::parse_iso_8601(typeformData$items$submitted_at) == minResponseDate]
     }
     
-    beforeToken <- typeformData$items$token[parsedate::parse_iso_8601(typeformData$items$submitted_at) == minResponseDate]
     
     typeformData2 <- GET(
       paste0('https://api.typeform.com/forms/NTuvnn/responses?page_size=1000&before=', beforeToken),
@@ -126,14 +124,14 @@ surveyResponses <- tibble(
   mutate(id = as.character(row_number())) %>%
   bind_rows(allExtraResponses)
 
-segments <- tibble(
-  patronId = as.numeric(typeformData$items$hidden.patronid),
-  segment = typeformData$items$hidden.segment
-)
+segments <- surveyResponses %>%
+  select(patronId, segment, donor) %>%
+  mutate(patronId = as.numeric(patronId))
 
 surveyAnswers <- bind_rows(surveyResponses$answers, .id="id") %>%
   filter(!is.na(text)) %>%
   left_join(surveyResponses, by="id") %>%
+  filter(!is.na(prodSeasonNo)) %>%
   select(-answers)
   
 
@@ -145,19 +143,20 @@ companyScore <- calculateNPS(nps_company,"nps_company_score")
 
 companyScoreBySegment <- nps_company %>%
   left_join(segments, by=c("customer_no" = "patronId")) %>%
-  mutate(nps = categorizeNPSRating(nps_company_score)) %>%
-  group_by(segment, nps) %>%
-  summarize(n = n()) %>%
-  group_by(segment) %>%
+  mutate(nps = categorizeNPSRating(nps_company_score),
+         donor = ifelse(is.na(donor), FALSE, donor)) %>%
+  group_by(segment, donor, nps) %>%
+  summarize(n = n_distinct(customer_no, prod_season_no)) %>%
+  group_by(segment, donor) %>%
   mutate(total = sum(n),
          per = round(n/total * 100, 1)) %>%
   filter(nps != "Passive") %>%
   spread(nps, per) %>%
-  summarize(total = sum(total),
+  summarize(total = max(total),
             detractor = sum(Detractor, na.rm=TRUE),
             promoter = sum(Promoter, na.rm=TRUE),
             score = promoter - detractor) %>%
-  select(segment, score) %>%
+  select(segment, donor, total, score) %>%
   filter(!segment %in% c("STX", NA))
 
 # Get the cumulative NPS as of each rating
@@ -209,7 +208,11 @@ artsClubStopWords <- tribble(
   "production",
   "productions",
   "performance",
-  "performances"
+  "performances",
+  "i've",
+  "it's",
+  "10",
+  "3"
 )
 
 companyText <- surveyAnswers %>%

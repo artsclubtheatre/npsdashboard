@@ -81,24 +81,31 @@ shinyServer(function(input, output, session) {
   })
   
   output$companyScoreBySegment <- renderPlot({
-    ggplot(companyScoreBySegment, aes(segment, score, fill=segment))+
+    companyScoreWithLabels <- companyScoreBySegment %>% 
+      mutate(donor = ifelse(donor, "Donor", "Not Donor"),
+             nLabel = paste("N=", total))
+    
+
+    ggplot(companyScoreWithLabels, aes(segment, score, group=donor, fill=segment))+
       geom_bar(stat='identity')+
       geom_text(aes(label=score), position = position_nudge(y=-5), size=10, color="white")+
+      geom_text(aes(label=nLabel), vjust=-1)+
+      facet_wrap("donor")+
       ylab("Score")+
       xlab("Patron Segment")+
       theme_minimal()
   })
   
   output$companyProductionGreater <- renderText({
-    avgCompany <- mean(allScores$nps_company_score)
-    avgProd <- mean(allScores$nps_prod_score)
+    avgCompany <- mean(allScores$nps_company_score, na.rm = TRUE)
+    avgProd <- mean(allScores$nps_prod_score, na.rm = TRUE)
     
     if(avgCompany > avgProd){
       return(paste(
         "On average, patrons rate the company (", 
-        round(avgCompany, 1), 
+        round(avgCompany, 2), 
         " avg ) higher than the production (",
-        round(avgProd, 1),
+        round(avgProd, 2),
         " avg )"
         ))
     } else if (avgCompany < avgProd){
@@ -140,7 +147,7 @@ shinyServer(function(input, output, session) {
       cloudname <- paste0(prod, "cloud")
       title <- productionScores$title[productionScores$prodSeason == plotname]
       list(
-        div(class="col-xs-12 col-md-3 panel panel-default",
+        div(class="col-xs-12 col-md-4 panel panel-default",
             h3(title),
             p(
               strong(productionScores$totalPromoters[productionScores$prodSeason == plotname]), " Promoters, ",
@@ -177,14 +184,15 @@ shinyServer(function(input, output, session) {
       output[[cloudname]] <- renderPlot({
         prodText <- productionText %>%
           filter(prodSeasonNo == plotname) %>%
-          top_n(20)
+          top_n(15, wt = n)
         
         ggplot(prodText, aes(label=word, size=n, col=word))+
           geom_text_wordcloud()+
-          scale_size_area(max_size = 15)+
+          scale_size_area(max_size = 12)+
           theme_minimal()
       })
     })
   }
+  
   
 })
