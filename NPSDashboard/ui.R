@@ -3,6 +3,7 @@ library(flexdashboard)
 library(scales)
 library(plotly)
 library(wordcloud2)
+library(DT)
 
 load("npsData.RData")
 
@@ -41,6 +42,10 @@ shinyUI(
           we would expect to see a straight line following the dashed line."),
         h4(textOutput("companyProductionGreater")),
         plotOutput("companyProductionCorrelation"),
+        hr(),
+        h1("Open Ended Patron Response Tagging"),
+        p("In progress"),
+        dataTableOutput("commentTagging"),
         hr(),
         h1("Production Net Promoter Scores"),
         uiOutput("prodPlots")

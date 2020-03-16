@@ -4,6 +4,7 @@ library(flexdashboard)
 library(plotly)
 library(reshape2)
 library(ggwordcloud)
+library(DT)
 
 load("npsData.RData")
 
@@ -141,6 +142,16 @@ shinyServer(function(input, output, session) {
       theme(axis.text = element_text(size=14))
   })
   
+  output$commentTagging <- renderDataTable({
+    DT::datatable(
+      surveyAnswers %>% 
+          select(field.ref, text, patronId,segment, prodTitle),
+      rownames = FALSE,
+      filter = 'top',
+      colnames = c("Field", "Patron Response", "Patron ID", "Segment", "Production")
+    )
+  })
+  
   output$prodPlots <- renderUI({
     plotOuputList <- lapply(productionScores$prodSeason, function(prod){
       plotname <- prod
@@ -154,9 +165,7 @@ shinyServer(function(input, output, session) {
               strong(productionScores$totalPassives[productionScores$prodSeason == plotname]), " Passives, and ",
               strong(productionScores$totalDetractors[productionScores$prodSeason == plotname]), " Detractors "
             ),
-            gaugeOutput(plotname),
-            p(strong(paste("What are the most common words used in", title,"ratings?"))),
-            plotOutput(cloudname, height="200")
+            gaugeOutput(plotname)
           )
       )
     })
@@ -181,16 +190,6 @@ shinyServer(function(input, output, session) {
         ))
       })
       
-      output[[cloudname]] <- renderPlot({
-        prodText <- productionText %>%
-          filter(prodSeasonNo == plotname) %>%
-          top_n(15, wt = n)
-        
-        ggplot(prodText, aes(label=word, size=n, col=word))+
-          geom_text_wordcloud()+
-          scale_size_area(max_size = 12)+
-          theme_minimal()
-      })
     })
   }
   

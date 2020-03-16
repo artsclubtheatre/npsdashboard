@@ -6,6 +6,8 @@ library(jsonlite)
 library(tidytext)
 library(parsedate)
 
+load("M:/Gabe/Reports/House Counts/housecounts.RData")
+
 # Initialize DB connection
 con <- DBI::dbConnect(
   odbc::odbc(),
@@ -52,8 +54,7 @@ typeformData <- GET(
       "Bearer ", 
       Sys.getenv("typeformToken")
       )
-    )
-  ) %>%
+  )) %>%
   content("text") %>%
   fromJSON(flatten = TRUE)
 
@@ -62,6 +63,7 @@ typeformData <- GET(
 # fetch the next page of data, so we have to use the "before" token and fetch backwards.
 
 typeformData2 <- list()
+
 extraResponsePages <- list()
 
 if(typeformData$page_count > 1) {
@@ -91,21 +93,25 @@ if(typeformData$page_count > 1) {
       content("text") %>%
       fromJSON(flatten = TRUE)
     
-    moreTypeformResponses <- tibble(
-        answers = typeformData2$items$answers,
-        patronId = typeformData2$items$hidden.patronid,
-        prodSeasonNo = typeformData2$items$hidden.prod_season_no,
-        prodTitle = typeformData2$items$hidden.show_title,
-        segment = typeformData2$items$hidden.segment
-      ) %>%
-      mutate(id = as.character(row_number()))
+    if(!is.na(typeformData2$items$answers)){
+      
+      moreTypeformResponses <- tibble(
+          answers = typeformData2$items$answers,
+          patronId = typeformData2$items$hidden.patronid,
+          prodSeasonNo = typeformData2$items$hidden.prod_season_no,
+          prodTitle = typeformData2$items$hidden.show_title,
+          segment = typeformData2$items$hidden.segment
+        ) %>%
+        mutate(id = as.character(row_number()))
+      
+      if("hidden.donor" %in% colnames(typeformData2$items)){
+        moreTypeformResponses %>% 
+          mutate(donor = typeformData2$items$hidden.donor)
+      }
+      
+      extraResponsePages[[as.character(page)]] <- moreTypeformResponses
     
-    if("hidden.donor" %in% colnames(typeformData2$items)){
-      moreTypeformResponses %>% 
-        mutate(donor = typeformData2$items$hidden.donor)
     }
-    
-    extraResponsePages[[as.character(page)]] <- moreTypeformResponses
     
   }
   
@@ -121,8 +127,8 @@ surveyResponses <- tibble(
     segment = typeformData$items$hidden.segment,
     donor = typeformData$items$hidden.donor == 'Y'
   ) %>%
-  mutate(id = as.character(row_number())) %>%
-  bind_rows(allExtraResponses)
+  bind_rows(allExtraResponses) %>%
+  mutate(id = as.character(row_number()))
 
 segments <- surveyResponses %>%
   select(patronId, segment, donor) %>%
@@ -194,7 +200,7 @@ productionScores <- bind_rows(prodResults, .id="prodSeason") %>%
 
 allScores <- nps_company %>%
   left_join(nps_prod, by=c("customer_no","prod_season_no")) %>%
-  select(customer_no, prod_season_no, nps_company_score, nps_prod_score)
+  select(customer_no, prod_season_no, nps_company_score, nps_prod_score, create_dt.x)
 
 # Get the text for word clouds
 
@@ -230,11 +236,17 @@ productionText <- surveyAnswers %>%
   select(text, prodSeasonNo) %>%
   gather(key, text, -prodSeasonNo) %>%
   unnest_tokens(word, text) %>%
-  group_by(prodSeasonNo) %>%
-  count(word, sort=TRUE) %>%
+  group_by(prodSeasonNo, word) %>%
+  mutate(n = n()) %>%
   ungroup() %>%
+  distinct(prodSeasonNo, word, n) %>%
   anti_join(stop_words) %>%
   anti_join(artsClubStopWords)
+
+# Calculate Response Rates ----
+
+# Get the prod seasons for the data we have
+# Filter 
 
 # Save data ----
 
@@ -247,6 +259,7 @@ save(
   allScores,
   companyText,
   productionText,
+  surveyAnswers,
   calculateNPS,
   file='NPSDashboard/npsData.RData'
 )
